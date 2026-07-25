@@ -1,1 +1,790 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>A Peaceful Journey</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,700&display=swap" rel="stylesheet">
+    
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+    <style>
+        /* ==========================================================================
+           CSS RESET & BASE STYLES
+           ========================================================================== */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #6b8296; 
+            font-family: 'Cormorant Garamond', serif;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding-bottom: 12vh;
+        }
+
+        .instruction-text {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.3rem;
+            font-style: italic;
+            text-align: center;
+            opacity: 0;
+            text-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            letter-spacing: 0.06em;
+            position: absolute;
+            bottom: 15vh;
+            font-weight: 400;
+        }
+
+        #final-message {
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 1.2rem;
+            font-style: italic;
+            text-align: center;
+            opacity: 0;
+            text-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+            letter-spacing: 0.08em;
+            position: absolute;
+            bottom: 8vh;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div id="instruction-1" class="instruction-text">Touch the water...</div>
+        <div id="instruction-2" class="instruction-text">Let the breeze carry the petals away.</div>
+        <div id="final-message">This little journey was made just for you.</div>
+    </div>
+
+    <script type="module">
+        /**
+         * ==========================================================================
+         * PREMIUM INTERACTIVE BIRTHDAY EXPERIENCE - FLAWLESS COORDINATE MAPPING
+         * ==========================================================================
+         */
+
+        const CONFIG = {
+            MAX_PETALS: 3000,      
+            MAX_RIPPLES: 32,       
+            SWIPE_THRESHOLD: 250,  
+            COLORS: {
+                waterTop: '#8ba4b8',
+                waterBottom: '#50677a',
+                petals: ['#ffd1dc', '#ffb7c5', '#ffc0cb', '#ffe4e1']
+            }
+        };
+
+        const STATE = {
+            phase: 'INIT', 
+            swipedCount: 0,
+            hasTouched: false
+        };
+
+        const app = new PIXI.Application({
+            resizeTo: window,
+            backgroundColor: 0x6b8296,
+            resolution: Math.min(window.devicePixelRatio || 1, 2),
+            autoDensity: true,
+            powerPreference: 'high-performance'
+        });
+        document.getElementById('canvas-container').appendChild(app.view);
+
+        const worldContainer = new PIXI.Container();
+        const waterContainer = new PIXI.Container();
+        const petalContainer = new PIXI.Container();
+        
+        const petalFilter = new PIXI.ColorMatrixFilter();
+        petalFilter.brightness(0.95); 
+        petalContainer.filters = [petalFilter];
+
+        app.stage.addChild(worldContainer);
+        worldContainer.addChild(waterContainer);
+        worldContainer.addChild(petalContainer);
+
+        // ==========================================================================
+        // ASSET GENERATION
+        // ==========================================================================
+        
+        function createWaterTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            
+            const grd = ctx.createLinearGradient(0, 0, 0, 1024);
+            grd.addColorStop(0, CONFIG.COLORS.waterTop);
+            grd.addColorStop(0.5, '#6a8194');
+            grd.addColorStop(1, CONFIG.COLORS.waterBottom);
+            ctx.fillStyle = grd;
+            ctx.fillRect(0, 0, 512, 1024);
+            
+            ctx.fillStyle = 'rgba(255,255,255,0.02)';
+            for(let i=0; i<5000; i++) {
+                ctx.beginPath();
+                ctx.arc(Math.random()*512, Math.random()*1024, Math.random()*4, 0, Math.PI*2);
+                ctx.fill();
+            }
+            
+            return PIXI.Texture.from(canvas);
+        }
+
+        function createPetalTextures() {
+            return CONFIG.COLORS.petals.map(color => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64; 
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                
+                ctx.translate(32, 32);
+                ctx.rotate(Math.PI / 4);
+                ctx.translate(-32, -32);
+
+                ctx.fillStyle = color;
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetY = 3;
+                
+                ctx.beginPath();
+                ctx.moveTo(32, 55);
+                ctx.bezierCurveTo(10, 55, 15, 25, 32, 10);
+                ctx.bezierCurveTo(49, 25, 54, 55, 32, 55);
+                ctx.fill();
+                
+                ctx.shadowColor = 'transparent';
+                ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(32, 52);
+                ctx.quadraticCurveTo(32, 35, 32, 25);
+                ctx.stroke();
+
+                return PIXI.Texture.from(canvas);
+            });
+        }
+
+        const waterBg = new PIXI.Sprite(createWaterTexture());
+        waterBg.width = app.screen.width;
+        waterBg.height = app.screen.height;
+        waterContainer.addChild(waterBg);
+        const petalTextures = createPetalTextures();
+
+        // ==========================================================================
+        // BULLETPROOF SILKY WATER SHADER 
+        // ==========================================================================
+        
+        const silkyRippleShader = `
+            precision highp float;
+            varying vec2 vTextureCoord;
+            uniform sampler2D uSampler;
+            
+            // These uniforms are injected automatically by PixiJS to handle physical scaling
+            uniform vec4 inputSize; 
+            uniform vec4 outputFrame;
+            
+            uniform vec4 uRipples[${CONFIG.MAX_RIPPLES}]; 
+            uniform int uActiveRipples;
+            uniform float uAspect;
+            uniform float uTime;
+
+            void main(void) {
+                // BUGFIX: Mathematically guarantee a 0.0 to 1.0 coordinate mapping across the 
+                // physical screen area, completely ignoring GPU-specific texture rounding (POT textures).
+                vec2 screenUV = (vTextureCoord * inputSize.xy) / outputFrame.zw;
+                
+                vec2 uv = vTextureCoord;
+                
+                float ambientWaveX = sin(screenUV.y * 10.0 + uTime * 0.5) * 0.001;
+                float ambientWaveY = cos(screenUV.x * 8.0 - uTime * 0.4) * 0.001;
+                uv += vec2(ambientWaveX, ambientWaveY);
+                
+                vec2 totalOffset = vec2(0.0);
+                float highlight = 0.0;
+                
+                for(int i = 0; i < ${CONFIG.MAX_RIPPLES}; i++) {
+                    if(i >= uActiveRipples) break;
+                    
+                    vec2 center = uRipples[i].xy;
+                    float life = uRipples[i].z; 
+                    float intensity = uRipples[i].w; 
+                    
+                    // Evaluate physics solely on the flawless screen coordinate system
+                    vec2 diff = screenUV - center;
+                    diff.x *= uAspect;
+                    float dist = length(diff);
+                    
+                    float radius = life * 0.5; 
+                    float thickness = 0.04 + (life * 0.05); 
+                    float distFromCrest = abs(dist - radius);
+                    
+                    if(distFromCrest < thickness && dist > 0.0) {
+                        float damping = 1.0 - smoothstep(0.0, 1.0, life); 
+                        float window = smoothstep(thickness, 0.0, distFromCrest);
+                        
+                        float waveFreq = 25.0; 
+                        float wave = sin((dist - radius) * waveFreq) * damping * window * intensity;
+                        
+                        vec2 dir = normalize(diff);
+                        float distortion = wave * 0.015; 
+                        totalOffset += dir * distortion;
+                        
+                        highlight += wave * 0.035 * intensity; 
+                    }
+                }
+                
+                // The visual offset must be applied to the real texture mapping
+                vec2 uvR = uv + totalOffset * 1.03;
+                vec2 uvG = uv + totalOffset * 1.0;
+                vec2 uvB = uv + totalOffset * 0.97;
+                
+                vec3 finalColor = vec3(texture2D(uSampler, uvR).r, texture2D(uSampler, uvG).g, texture2D(uSampler, uvB).b);
+                vec3 lightColor = vec3(1.0, 0.98, 0.95);
+                finalColor += lightColor * max(0.0, highlight); 
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        class WaterSimulator {
+            constructor() {
+                this.ripples = [];
+                this.uniforms = {
+                    uRipples: new Float32Array(CONFIG.MAX_RIPPLES * 4),
+                    uActiveRipples: 0,
+                    uAspect: app.screen.width / app.screen.height,
+                    uTime: 0
+                };
+                
+                this.filter = new PIXI.Filter(null, silkyRippleShader, this.uniforms);
+                
+                // BUGFIX: Disable arbitrary filter padding and strictly lock the bounding 
+                // area to the screen. This ensures 0.0 (top left) and 1.0 (bottom right) align flawlessly.
+                this.filter.padding = 0; 
+                waterContainer.filterArea = app.screen;
+                waterContainer.filters = [this.filter];
+                
+                window.addEventListener('resize', () => {
+                    this.uniforms.uAspect = app.screen.width / app.screen.height;
+                    waterBg.width = app.screen.width;
+                    waterBg.height = app.screen.height;
+                });
+            }
+
+            addRipple(x, y, intensity = 1.0) {
+                this.ripples.push({
+                    x: x / app.screen.width,
+                    y: y / app.screen.height,
+                    life: 0.0,
+                    intensity: intensity
+                });
+                if(this.ripples.length > CONFIG.MAX_RIPPLES) {
+                    this.ripples.shift();
+                }
+            }
+
+            update(delta, time) {
+                this.uniforms.uTime = time * 0.01;
+                
+                let activeCount = 0;
+                for (let i = this.ripples.length - 1; i >= 0; i--) {
+                    let r = this.ripples[i];
+                    r.life += 0.005 * delta; 
+                    
+                    if (r.life >= 1.0) {
+                        this.ripples.splice(i, 1);
+                    } else {
+                        this.uniforms.uRipples[activeCount * 4] = r.x;
+                        this.uniforms.uRipples[activeCount * 4 + 1] = r.y;
+                        this.uniforms.uRipples[activeCount * 4 + 2] = r.life;
+                        this.uniforms.uRipples[activeCount * 4 + 3] = r.intensity;
+                        activeCount++;
+                    }
+                }
+                this.uniforms.uActiveRipples = activeCount;
+            }
+        }
+        const water = new WaterSimulator();
+
+        // ==========================================================================
+        // TEXT TARGET GENERATOR
+        // ==========================================================================
+        
+        function getPetalTextTargets(numPoints) {
+            const canvas = document.createElement('canvas');
+            const w = app.screen.width;
+            const h = app.screen.height;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, w, h);
+            
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const isMobile = w < 768;
+            const fontSize1 = isMobile ? 64 : 80;
+            const fontSize2 = isMobile ? 80 : 100;
+            const gap = isMobile ? 65 : 85; 
+            
+            ctx.lineWidth = 2;
+            
+            ctx.font = `italic 700 ${fontSize1}px "Cormorant Garamond", serif`;
+            ctx.strokeText("Happy", w / 2, h / 2 - gap);
+            ctx.fillText("Happy", w / 2, h / 2 - gap);
+            
+            ctx.strokeText("Birthday", w / 2, h / 2);
+            ctx.fillText("Birthday", w / 2, h / 2);
+            
+            ctx.font = `italic 700 ${fontSize2}px "Cormorant Garamond", serif`;
+            ctx.strokeText("Samiksha", w / 2, h / 2 + gap);
+            ctx.fillText("Samiksha", w / 2, h / 2 + gap);
+            
+            const imgData = ctx.getImageData(0, 0, w, h).data;
+            const allValidPoints = [];
+            
+            for (let y = 0; y < h; y += 2) {
+                for (let x = 0; x < w; x += 2) {
+                    const idx = (y * w + x) * 4;
+                    if (imgData[idx] > 128) {
+                        allValidPoints.push({ x, y });
+                    }
+                }
+            }
+            
+            const targets = [];
+            const step = Math.max(1, allValidPoints.length / numPoints);
+            
+            for(let i = 0; i < numPoints; i++) {
+                const index = Math.floor(i * step);
+                if(allValidPoints[index]) {
+                    targets.push(allValidPoints[index]);
+                }
+            }
+            
+            return targets;
+        }
+
+        // ==========================================================================
+        // PETAL PARTICLE SYSTEM
+        // ==========================================================================
+        
+        class Petal {
+            constructor() {
+                this.sprite = new PIXI.Sprite(petalTextures[Math.floor(Math.random() * petalTextures.length)]);
+                this.sprite.anchor.set(0.5);
+                this.sprite.visible = false;
+                this.sprite.alpha = 0;
+                this.isFirst = false;
+                this.onLandCallback = null;
+                petalContainer.addChild(this.sprite);
+                this.reset();
+            }
+
+            reset() {
+                this.state = 'IDLE'; 
+                this.sprite.visible = false;
+                this.sprite.alpha = 0;
+                
+                this.scaleBase = 0.35 + Math.random() * 0.35; 
+                this.scaleTarget = this.scaleBase;
+                this.sprite.scale.set(this.scaleBase);
+                
+                this.vx = 0;
+                this.vy = 0;
+                this.targetX = 0;
+                this.targetY = 0;
+                
+                this.wobbleSpeed = 0.02 + Math.random() * 0.03;
+                this.wobblePhase = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.05;
+                this.targetRotation = 0;
+                
+                this.flipSpeed = 0.01 + Math.random() * 0.02;
+                this.flipPhase = Math.random() * Math.PI * 2;
+                
+                this.landingY = (Math.random() * (app.screen.height + 150)) - 75;
+            }
+
+            spawn(isFirst = false, callback = null) {
+                this.isFirst = isFirst;
+                this.onLandCallback = callback;
+                this.state = 'FALLING';
+                this.sprite.visible = true;
+                
+                if (this.isFirst) {
+                    this.sprite.x = app.screen.width / 2 + (Math.random() * 100 - 50);
+                    this.landingY = app.screen.height * 0.55; 
+                } else {
+                    this.sprite.x = (Math.random() * (app.screen.width + 150)) - 75;
+                }
+                
+                this.sprite.y = -100 - (Math.random() * 150);
+                this.sprite.rotation = Math.random() * Math.PI * 2;
+                this.vy = 0.8 + Math.random() * 1.5;
+                
+                gsap.to(this.sprite, { alpha: 0.85 + Math.random() * 0.15, duration: 1.5 });
+            }
+
+            update(delta, time) {
+                if (this.state === 'IDLE') return;
+
+                this.sprite.scale.x += (this.scaleTarget * Math.sin(time * this.flipSpeed + this.flipPhase) - this.sprite.scale.x) * 0.1;
+                this.sprite.scale.y += (this.scaleTarget - this.sprite.scale.y) * 0.1;
+
+                if (this.state !== 'FORMING') {
+                    this.sprite.rotation += this.rotSpeed * delta;
+                }
+
+                switch (this.state) {
+                    case 'FALLING':
+                        this.sprite.y += this.vy * delta;
+                        this.sprite.x += Math.sin(time * this.wobbleSpeed + this.wobblePhase) * 1.2 * delta;
+                        
+                        if (this.sprite.y >= this.landingY) {
+                            this.state = 'FLOATING';
+                            
+                            // Guaranteed impact exactly at the coordinates the petal landed
+                            if (this.isFirst) {
+                                water.addRipple(this.sprite.x, this.sprite.y, 2.5); 
+                                setTimeout(() => water.addRipple(this.sprite.x, this.sprite.y, 1.2), 400); 
+                            } else if (Math.random() > 0.15) { 
+                                water.addRipple(this.sprite.x, this.sprite.y, 0.4); 
+                            }
+                            
+                            gsap.to(this.sprite, {
+                                y: this.sprite.y - 12,
+                                duration: 0.5,
+                                yoyo: true,
+                                repeat: 1,
+                                ease: "sine.inOut"
+                            });
+                            this.rotSpeed *= 0.15; 
+                            
+                            if (this.isFirst && this.onLandCallback) {
+                                this.onLandCallback();
+                                this.onLandCallback = null;
+                            }
+                        }
+                        break;
+
+                    case 'FLOATING':
+                        this.sprite.x += Math.sin(time * 0.008 + this.wobblePhase) * 0.15 * delta;
+                        this.sprite.y += Math.cos(time * 0.01 + this.wobblePhase) * 0.1 * delta;
+                        break;
+
+                    case 'SWIPED':
+                        this.sprite.x += this.vx * delta;
+                        this.sprite.y += this.vy * delta;
+                        this.vx *= 0.94; 
+                        this.vy *= 0.94;
+                        
+                        this.sprite.x += Math.sin(time * 0.02 + this.wobblePhase) * 0.4 * delta;
+                        
+                        if (Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1) {
+                            this.state = 'FLOATING';
+                        }
+                        break;
+
+                    case 'FORMING':
+                        const dx = this.targetX - this.sprite.x;
+                        const dy = this.targetY - this.sprite.y;
+                        
+                        this.vx = (this.vx * 0.88) + (dx * 0.008);
+                        this.vy = (this.vy * 0.88) + (dy * 0.008);
+                        
+                        this.sprite.x += this.vx * delta;
+                        this.sprite.y += this.vy * delta;
+                        
+                        this.sprite.rotation += (this.targetRotation - this.sprite.rotation) * 0.08;
+                        this.sprite.alpha += (1.0 - this.sprite.alpha) * 0.05;
+                        
+                        this.sprite.x += Math.sin(time * 0.01 + this.wobblePhase) * 0.015;
+                        this.sprite.y += Math.cos(time * 0.01 + this.wobblePhase) * 0.015;
+                        break;
+                }
+            }
+        }
+
+        const petals = Array.from({ length: CONFIG.MAX_PETALS }, () => new Petal());
+
+        // ==========================================================================
+        // INTERACTION & AUDIO
+        // ==========================================================================
+        
+        let pointer = { x: -1000, y: -1000, vx: 0, vy: 0, isDown: false };
+        let lastPointer = { x: -1000, y: -1000 };
+        let lastRipple = { x: -1000, y: -1000 };
+        
+        let audioCtx, ambientGain;
+        
+        function initAudio() {
+            if(audioCtx) return;
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if(!AudioContext) return;
+            
+            audioCtx = new AudioContext();
+            const bufferSize = audioCtx.sampleRate * 2;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for(let i=0; i<bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.5;
+            }
+            
+            const noiseSource = audioCtx.createBufferSource();
+            noiseSource.buffer = buffer;
+            noiseSource.loop = true;
+            
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 250; 
+            
+            ambientGain = audioCtx.createGain();
+            ambientGain.gain.value = 0; 
+            
+            noiseSource.connect(filter);
+            filter.connect(ambientGain);
+            ambientGain.connect(audioCtx.destination);
+            noiseSource.start();
+            
+            ambientGain.gain.setTargetAtTime(0.06, audioCtx.currentTime, 4.0);
+        }
+
+        function handlePointerMove(e) {
+            const isTouch = e.type.includes('touch');
+            const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+            const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+            pointer.vx = clientX - lastPointer.x;
+            pointer.vy = clientY - lastPointer.y;
+            pointer.x = clientX;
+            pointer.y = clientY;
+            
+            lastPointer.x = clientX;
+            lastPointer.y = clientY;
+
+            if (pointer.isDown || isTouch) {
+                const moveDist = Math.hypot(clientX - lastRipple.x, clientY - lastRipple.y);
+                if (moveDist > 25) {
+                    water.addRipple(clientX, clientY, Math.min(1.5, moveDist * 0.05));
+                    lastRipple.x = clientX;
+                    lastRipple.y = clientY;
+                }
+                triggerInteraction(clientX, clientY, pointer.vx, pointer.vy);
+            }
+        }
+
+        function triggerInteraction(px, py, vx, vy) {
+            if(!STATE.hasTouched && STATE.phase === 'SPRING') {
+                STATE.hasTouched = true;
+                initAudio();
+                gsap.killTweensOf(".instruction-text");
+                gsap.to(".instruction-text", { opacity: 0, duration: 1 });
+            }
+
+            if (STATE.phase === 'SPRING' || STATE.phase === 'INTERACTIVE') {
+                STATE.phase = 'INTERACTIVE';
+                
+                petals.forEach(p => {
+                    if(p.state === 'FLOATING' || p.state === 'SWIPED') {
+                        const dx = p.sprite.x - px;
+                        const dy = p.sprite.y - py;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        
+                        const maxRadius = 180;
+                        if(dist < maxRadius) {
+                            const influence = Math.pow((maxRadius - dist) / maxRadius, 2); 
+                            
+                            const dragX = vx * influence * 0.08;
+                            const dragY = vy * influence * 0.08;
+                            const pushForce = influence * 1.8;
+                            const pushX = (dx / dist) * pushForce;
+                            const pushY = (dy / dist) * pushForce;
+                            const swirlForce = influence * 0.8 * (Math.random() > 0.5 ? 1 : -1);
+                            const swirlX = (-dy / dist) * swirlForce;
+                            const swirlY = (dx / dist) * swirlForce;
+
+                            p.vx += dragX + pushX + swirlX;
+                            p.vy += dragY + pushY + swirlY;
+                            p.rotSpeed += (Math.random() - 0.5) * influence * 0.6;
+                            
+                            if(p.state === 'FLOATING') {
+                                p.state = 'SWIPED';
+                                STATE.swipedCount++;
+                                
+                                if(STATE.swipedCount > CONFIG.SWIPE_THRESHOLD) {
+                                    triggerMagicMoment();
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        window.addEventListener('pointerdown', (e) => {
+            pointer.isDown = true;
+            lastPointer.x = e.clientX;
+            lastPointer.y = e.clientY;
+            lastRipple.x = e.clientX;
+            lastRipple.y = e.clientY;
+            if(STATE.phase === 'SPRING' || STATE.phase === 'INTERACTIVE') {
+                water.addRipple(e.clientX, e.clientY, 1.2); 
+                triggerInteraction(e.clientX, e.clientY, 0, 0);
+            }
+        });
+        window.addEventListener('pointerup', () => pointer.isDown = false);
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+
+        // ==========================================================================
+        // MAIN LOOP & SEQUENCER 
+        // ==========================================================================
+        
+        let globalTime = 0;
+
+        app.ticker.add((delta) => {
+            globalTime += delta;
+            water.update(delta, globalTime);
+            petals.forEach(p => p.update(delta, globalTime));
+        });
+
+        function onFirstPetalLanded() {
+            STATE.phase = 'SPRING';
+            let spawnIndex = 1;
+            
+            const trickleInterval = setInterval(() => {
+                if (STATE.phase === 'MAGIC') {
+                    clearInterval(trickleInterval);
+                    return;
+                }
+                for(let i=0; i<3; i++) {
+                    if(spawnIndex < CONFIG.MAX_PETALS) petals[spawnIndex++].spawn();
+                }
+            }, 150);
+
+            setTimeout(() => {
+                clearInterval(trickleInterval);
+                const floodInterval = setInterval(() => {
+                    if (STATE.phase === 'MAGIC' || spawnIndex >= CONFIG.MAX_PETALS) {
+                        clearInterval(floodInterval);
+                        
+                        setTimeout(() => {
+                            if(!STATE.hasTouched) {
+                                gsap.to("#instruction-1", { opacity: 1, duration: 2.5 });
+                                setTimeout(() => {
+                                    if(!STATE.hasTouched) {
+                                        gsap.to("#instruction-1", { opacity: 0, duration: 1.5 });
+                                        setTimeout(() => {
+                                            if(!STATE.hasTouched) gsap.to("#instruction-2", { opacity: 1, duration: 2.5 });
+                                        }, 1500);
+                                    }
+                                }, 5500);
+                            }
+                        }, 2000);
+                        return;
+                    }
+                    
+                    const batch = 40;
+                    for(let i=0; i<batch; i++) {
+                        if(spawnIndex < CONFIG.MAX_PETALS) petals[spawnIndex++].spawn();
+                    }
+                }, 40); 
+            }, 2500);
+        }
+
+        function startExperience() {
+            setTimeout(() => {
+                STATE.phase = 'FIRST_PETAL';
+                petals[0].spawn(true, onFirstPetalLanded);
+            }, 1200);
+        }
+
+        function triggerMagicMoment() {
+            if(STATE.phase === 'MAGIC' || STATE.phase === 'FINAL') return;
+            STATE.phase = 'MAGIC';
+            
+            const activePetals = petals.filter(p => p.state !== 'IDLE');
+            let targets = getPetalTextTargets(activePetals.length);
+            
+            activePetals.sort((a, b) => a.sprite.x - b.sprite.x);
+            targets.sort((a, b) => a.x - b.x);
+            
+            activePetals.forEach((p, index) => {
+                if(targets[index]) {
+                    p.targetX = targets[index].x;
+                    p.targetY = targets[index].y;
+                    p.state = 'FORMING';
+                    
+                    p.scaleTarget = 0.045 + Math.random() * 0.015; 
+                    p.targetRotation = Math.PI / -4;
+                    
+                    p.vx = (Math.random() - 0.5) * 2; 
+                    p.vy = (Math.random() - 0.5) * 2;
+                } else {
+                    p.vx = (Math.random() > 0.5 ? 1 : -1) * (5 + Math.random() * 10);
+                    p.vy = (Math.random() > 0.5 ? 1 : -1) * (5 + Math.random() * 10);
+                    p.state = 'SWIPED'; 
+                }
+            });
+
+            setTimeout(() => {
+                STATE.phase = 'FINAL';
+                gsap.to("#final-message", { opacity: 1, duration: 4, ease: "power2.inOut" });
+                
+                if(ambientGain) {
+                    ambientGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 5.0);
+                }
+            }, 6500);
+        }
+
+        document.fonts.ready.then(() => {
+            startExperience();
+        });
+
+    </script>
+</body>
+</html>
